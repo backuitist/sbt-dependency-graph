@@ -7,45 +7,52 @@ package net.virtualvoid.sbt.graph
 
 import sbt.SbtDependencyGraphCompat
 
-object Graph
-{
-	// [info] foo
-	// [info]   +-bar
-	// [info]   | +-baz
-	// [info]   |
-	// [info]   +-quux
-	def toAscii[A](top: A,
+object Graph {
+
+  /**
+   * Formats a tree as follow:
+   * {{{
+   * foo
+   *   +-bar
+   *   | +-baz1
+   *   | | +-baz1.1
+   *   | |
+   *   | +-baz2
+   *   | +-baz3
+   *   |
+   *   +-quux
+   *     +-last
+   * }}}
+   */
+  def toAscii[A](top: A,
                  children: A => Seq[A],
                  display: A => String,
                  maxColumn: Int = defaultColumnSize): String = {
-		val twoSpaces = " " + " " // prevent accidentally being converted into a tab
-		def limitLine(s: String): String =
-			if (s.length > maxColumn) s.slice(0, maxColumn - 2) + ".."
-			else s
-		def insertBar(s: String, at: Int): String =
-      if (at < s.length)
-        s.slice(0, at) +
-        (s(at).toString match {
-          case " " => "|"
-          case x => x
-        }) +
-        s.slice(at + 1, s.length)
-      else s
-		def toAsciiLines(node: A, level: Int): Vector[String] = {
-			val line = limitLine((twoSpaces * level) + (if (level == 0) "" else "+-") + display(node))
-			val cs = Vector(children(node): _*)
-			val childLines = cs map {toAsciiLines(_, level + 1)}
-			val withBar = childLines.zipWithIndex flatMap {
-				case (lines, pos) if pos < (cs.size - 1) => lines map {insertBar(_, 2 * (level + 1))}
-				case (lines, pos) =>
-					if (lines.last.trim != "") lines ++ Vector(twoSpaces * (level + 1))
-					else lines
-			}
-			line +: withBar
-		}
 
-		toAsciiLines(top, 0).mkString("\n")
-	}
+    val twoSpaces = " " + " " // prevent accidentally being converted into a tab
+
+    def limitLine(s: String): String = {
+      if (s.length > maxColumn) s.slice(0, maxColumn - 2) + ".."
+      else s
+    }
+
+    def toAsciiLines(nodes: List[A], prefix: String) : Seq[String] = {
+      nodes match {
+        case Nil => Seq()
+        case node :: Nil =>
+          limitLine(prefix + "+-" + display(node)) +:
+            toAsciiLines(children(node).toList, prefix + twoSpaces) :+
+            prefix
+
+        case node :: remain =>
+          limitLine(prefix + "+-" + display(node)) +:
+            (toAsciiLines(children(node).toList, prefix + "| ") ++
+          toAsciiLines(remain, prefix) )
+      }
+    }
+
+    (display(top) +: toAsciiLines(children(top).toList, twoSpaces)).mkString("\n")
+  }
 
   def defaultColumnSize: Int = {
     val termWidth = SbtDependencyGraphCompat.getTerminalWidth
